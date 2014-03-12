@@ -27,8 +27,14 @@ from cStringIO import StringIO
 
 
 log = logging.getLogger(__name__)
+
+import sys
 zoneinfo = None
-zoneinfo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'zoneinfo.zip'))
+if hasattr(sys, 'frozen'):
+    zoneinfo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'zoneinfo.zip').replace(r'library.zip\pytz', '\pytz'))
+#     raise ValueError(zoneinfo_path)
+else:
+    zoneinfo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'zoneinfo.zip'))
 
 def get_zoneinfo():
     """Cache the opened zipfile in the module."""
@@ -46,7 +52,23 @@ class TimezoneLoader(object):
     def open_resource(self, name):
         """Opens a resource from the zoneinfo subdir for reading."""
         # Import nested here so we can run setup.py without GAE.
-        from google.appengine.api import memcache
+        # Fake memcache for when we're not running under the SDK, likely a script.
+        class memcache(object):
+            @classmethod
+            def add(*args, **kwargs):
+                pass
+        
+            @classmethod
+            def get(*args, **kwargs):
+                return None
+        
+        try:
+            # Don't use memcache outside of Google App Engine or with GAE's dev server.
+            if not os.environ.get('SERVER_SOFTWARE', '').startswith('Development'):
+                from google.appengine.api import memcache
+        except ImportError:
+            pass
+#         from google.appengine.api import memcache
         from pytz import OLSON_VERSION
 
         name_parts = name.lstrip('/').split('/')
